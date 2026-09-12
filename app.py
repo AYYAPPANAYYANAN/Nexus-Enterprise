@@ -21,13 +21,13 @@ except ImportError:
         def send_message(self, channel, recipient, text): pass
 
 # --- Enterprise-Grade SQLite & Real-Time Swarm Architecture ---
-DB_FILE = "nexus_campus_enterprise_v10.db"
+DB_FILE = "nexus_campus_enterprise_v11.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    # 1. Profiles Table with RBAC Roles (STUDENT, MODERATOR, ADMIN) & Passkeys
+    # 1. Profiles Table with RBAC Roles & Passkeys
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS profiles (
             user_id TEXT PRIMARY KEY,
@@ -49,7 +49,7 @@ def init_db():
         )
     """)
     
-    # 2. Marketplace Listings Table with FTS5 virtual-ready structure
+    # 2. Marketplace Listings Table (Expanded to 6 initial high-value items)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS listings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,6 +76,7 @@ def init_db():
             buyer_id TEXT,
             seller_id TEXT,
             amount REAL,
+            platform_fee REAL DEFAULT 0.0,
             status TEXT DEFAULT 'ESCROW_SECURED',
             timestamp TEXT
         )
@@ -127,7 +128,7 @@ def init_db():
         )
     """)
 
-    # 8. Channel Config Table for Enterprise Webhooks (Telegram, Discord, Email)
+    # 8. Channel Config Table for Enterprise Webhooks
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS channel_configs (
             config_key TEXT PRIMARY KEY,
@@ -136,7 +137,7 @@ def init_db():
         )
     """)
 
-    # 9. Enterprise Audit Logs Table (RBAC / Admin actions)
+    # 9. Enterprise Audit Logs Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS audit_logs (
             audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,7 +148,17 @@ def init_db():
         )
     """)
 
-    # Insert Enterprise Demo Profiles Safely (Including Moderator / Admin)
+    # 10. Platform Treasury Table (Revenue tracking from escrow gas fees)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS platform_treasury (
+            treasury_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            total_fees_collected REAL DEFAULT 0.0,
+            escrow_volume_protected REAL DEFAULT 0.0,
+            last_audit TEXT
+        )
+    """)
+
+    # Insert Enterprise Demo Profiles Safely
     cursor.execute("""
         INSERT OR IGNORE INTO profiles 
         (user_id, full_name, avatar_url, department, year_of_study, roll_number, class_name, section, biometric_id, role, trust_score, wallet_balance, rating, badges_json) 
@@ -180,23 +191,31 @@ def init_db():
     # Seed Telemetry channels if empty
     cursor.execute("SELECT COUNT(*) FROM swarm_telemetry")
     if cursor.fetchone()[0] == 0:
-        cursor.execute("INSERT INTO swarm_telemetry (channel_name, messages_handled, active_sessions, last_updated) VALUES ('Telegram Bot', 234, 28, ?)", (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),))
-        cursor.execute("INSERT INTO swarm_telemetry (channel_name, messages_handled, active_sessions, last_updated) VALUES ('Discord Swarm', 189, 16, ?)", (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),))
-        cursor.execute("INSERT INTO swarm_telemetry (channel_name, messages_handled, active_sessions, last_updated) VALUES ('Webhooks / Email', 92, 7, ?)", (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),))
+        cursor.execute("INSERT INTO swarm_telemetry (channel_name, messages_handled, active_sessions, last_updated) VALUES ('Telegram Bot', 289, 34, ?)", (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),))
+        cursor.execute("INSERT INTO swarm_telemetry (channel_name, messages_handled, active_sessions, last_updated) VALUES ('Discord Swarm', 215, 21, ?)", (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),))
+        cursor.execute("INSERT INTO swarm_telemetry (channel_name, messages_handled, active_sessions, last_updated) VALUES ('Webhooks / Email', 114, 9, ?)", (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),))
 
-    # Seed Demo Listings if empty
+    # Seed Platform Treasury if empty
+    cursor.execute("SELECT COUNT(*) FROM platform_treasury")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO platform_treasury (total_fees_collected, escrow_volume_protected, last_audit) VALUES (142.50, 7125.00, ?)", (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),))
+
+    # Seed Demo Listings (Exactly 6 High-Value Active Inventory Items)
     cursor.execute("SELECT COUNT(*) FROM listings")
     if cursor.fetchone()[0] == 0:
         demo_items = [
             ("ayyappan", "Casio Scientific Calculator fx-991ES", "Assets", 350.00, "Like New", "Essential engineering mathematics tool. Pristine condition with slider cover."),
             ("hari", "ESP32 IoT Microcontroller Lab Kit", "Hardware", 650.00, "Brand New", "Full kit with sensors, breadboard, OLED display, and jumper wires for AI hackathons."),
-            ("ayyappan", "Data Structures & Algorithms Reference Book", "Books", 250.00, "Good Condition", "Standard curriculum text. Zero missing pages, highlighted important algorithms.")
+            ("ayyappan", "Data Structures & Algorithms Reference Book", "Books", 250.00, "Good Condition", "Standard curriculum text. Zero missing pages, highlighted important algorithms."),
+            ("hari", "STM32 Nucleo Development Board", "Hardware", 850.00, "Brand New", "High-performance ARM Cortex-M development board for embedded systems design."),
+            ("ayyappan", "Engineering Mechanics & Thermodynamics Text", "Books", 300.00, "Like New", "Comprehensive curriculum guide with solved problem sets and formula summaries."),
+            ("hari", "Chemistry Lab Coat & Precision Safety Goggles", "Assets", 180.00, "Unused", "Standard university-compliant white lab coat (Size L) with anti-fog safety eyewear.")
         ]
         for item in demo_items:
             cursor.execute("""
                 INSERT INTO listings (seller_id, item_name, category, price, condition, description, views_count, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (item[0], item[1], item[2], item[3], item[4], item[5], 94, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            """, (item[0], item[1], item[2], item[3], item[4], item[5], 112, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
     # Seed Bulletin Announcements if empty
     cursor.execute("SELECT COUNT(*) FROM campus_announcements")
@@ -204,7 +223,7 @@ def init_db():
         cursor.execute("""
             INSERT INTO campus_announcements (author_id, title, content, priority, likes, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, ("ayyappan", "Nexus Accelerator & Hardware Swap", "Top 3 teams get direct accelerator interviews. Use the peer exchange hub for acquiring microcontrollers and lab manuals instantly!", "HIGH", 54, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        """, ("ayyappan", "Nexus OS Accelerator & Hardware Swap", "Top 3 teams get direct accelerator interviews. Use the peer exchange hub for acquiring microcontrollers and lab manuals instantly!", "HIGH", 68, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
     conn.commit()
     conn.close()
@@ -237,7 +256,7 @@ manager = ConnectionManager()
 # --- Initialize Caspian SDK Client & Autonomous Behavior ---
 client = CommClient()
 client.behavior_prompt(
-    "You are Nexus AI, an intelligent enterprise P2P marketplace agent built on the Caspian SDK. "
+    "You are Nexus OS AI, an intelligent enterprise P2P marketplace agent built on the Caspian SDK. "
     "Be concise, professional, encourage safe in-person handovers near academic blocks, "
     "and automatically parse natural text into structured enterprise items and prices."
 )
@@ -269,7 +288,7 @@ def handle_caspian_multichannel_message(message):
             cursor.execute("UPDATE swarm_telemetry SET messages_handled = messages_handled + 1 WHERE channel_name = 'Telegram Bot'")
             conn.commit()
             item_id = cursor.lastrowid
-            reply_text = f"✅ [Nexus  Swarm]: Indexed listing #{item_id} for '{item_part}' at ₹{price}. Live on Enterprise Dashboard!"
+            reply_text = f"✅ [Nexus OS Swarm]: Indexed listing #{item_id} for '{item_part}' at ₹{price}. Live on Enterprise Dashboard!"
             
         elif text_lower.startswith("looking for") or text_lower.startswith("need") or text_lower.startswith("find"):
             query = text_lower.replace("looking for", "", 1).replace("need", "", 1).replace("find", "", 1).strip()
@@ -284,7 +303,7 @@ def handle_caspian_multichannel_message(message):
             else:
                 reply_text = f"❌ [Nexus AI Search]: No active items found matching '{query}'. Request broadcasted!"
         else:
-            reply_text = "🤖 [Nexus  Agent]: Send 'Selling [Item] for [Price]' to list, or 'Looking for [Item]' to query inventory."
+            reply_text = "🤖 [Nexus OS Agent]: Send 'Selling [Item] for [Price]' to list, or 'Looking for [Item]' to query inventory."
             
         if hasattr(message, "reply"):
             message.reply(reply_text)
@@ -295,24 +314,16 @@ def handle_caspian_multichannel_message(message):
         conn.close()
 
 def proactive_caspian_swarm_loop():
-    """
-    Autonomous background worker handling Proactive Agent Loops:
-    1. Stale listing pings (> 3 days old)
-    2. Escrow handover reminders
-    """
     while True:
         try:
             time.sleep(300)
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
-            # Increment telemetry count for message volume
             cursor.execute("UPDATE swarm_telemetry SET messages_handled = messages_handled + 1 WHERE channel_name = 'Discord Swarm'")
             
-            # Simulated Stale Listing Check
             cursor.execute("SELECT id, item_name, seller_id, views_count FROM listings WHERE status='ACTIVE' LIMIT 1")
             stale = cursor.fetchone()
             if stale:
-                # Log proactive system notification
                 cursor.execute("""
                     INSERT INTO chat_messages (listing_id, sender_id, message, timestamp)
                     VALUES (?, 'NEXUS_AGENT', ?, ?)
@@ -324,7 +335,7 @@ def proactive_caspian_swarm_loop():
             pass
 
 # --- FastAPI Enterprise Application Backend ---
-app = FastAPI(title="Nexus  Enterprise Campus Exchange", version="10.0.0")
+app = FastAPI(title="Nexus OS Enterprise Campus Exchange", version="11.0.0")
 
 class BiometricLoginRequest(BaseModel):
     user_id: str
@@ -390,14 +401,14 @@ def get_dashboard_data(user_id: str = "ayyappan"):
     announcements = [{"id": a[0], "author_id": a[1], "title": a[2], "content": a[3], "priority": a[4], "likes": a[5], "created_at": a[6]} for a in cursor.fetchall()]
     
     cursor.execute("""
-        SELECT t.tx_id, l.item_name, t.buyer_id, t.seller_id, t.amount, t.status, t.timestamp
+        SELECT t.tx_id, l.item_name, t.buyer_id, t.seller_id, t.amount, t.platform_fee, t.status, t.timestamp
         FROM transactions t
         JOIN listings l ON t.listing_id = l.id
         WHERE t.buyer_id = ? OR t.seller_id = ?
         ORDER BY t.tx_id DESC
     """, (user_id, user_id))
     tx_rows = cursor.fetchall()
-    transactions = [{"tx_id": t[0], "item_name": t[1], "buyer_id": t[2], "seller_id": t[3], "amount": t[4], "status": t[5], "timestamp": t[6]} for t in tx_rows]
+    transactions = [{"tx_id": t[0], "item_name": t[1], "buyer_id": t[2], "seller_id": t[3], "amount": t[4], "platform_fee": t[5], "status": t[6], "timestamp": t[7]} for t in tx_rows]
     
     cursor.execute("SELECT msg_id, listing_id, sender_id, message, timestamp FROM chat_messages ORDER BY msg_id ASC")
     chat_rows = cursor.fetchall()
@@ -411,24 +422,25 @@ def get_dashboard_data(user_id: str = "ayyappan"):
     tel_rows = cursor.fetchall()
     telemetry = [{"telemetry_id": tr[0], "channel_name": tr[1], "messages_handled": tr[2], "active_sessions": tr[3], "last_updated": tr[4]} for tr in tel_rows]
 
-    # Fetch channel configs for Channel Diagnostics tab
     cursor.execute("SELECT config_key, config_value, status FROM channel_configs")
     cfg_rows = cursor.fetchall()
     channels = [{"key": cr[0], "value": cr[1], "status": cr[2]} for cr in cfg_rows]
 
-    # Fetch Admin audit logs if user is admin/moderator
     audit_logs = []
     if profile["role"] in ["ADMIN", "MODERATOR"]:
         cursor.execute("SELECT audit_id, admin_id, action, target, timestamp FROM audit_logs ORDER BY audit_id DESC LIMIT 20")
         arows = cursor.fetchall()
         audit_logs = [{"audit_id": ar[0], "admin_id": ar[1], "action": ar[2], "target": ar[3], "timestamp": ar[4]} for ar in arows]
 
-    # Fetch all user profiles for Admin management
     all_users = []
     if profile["role"] == "ADMIN":
         cursor.execute("SELECT user_id, full_name, department, role, is_frozen, wallet_balance FROM profiles")
         urows = cursor.fetchall()
         all_users = [{"user_id": ur[0], "full_name": ur[1], "department": ur[2], "role": ur[3], "is_frozen": ur[4], "wallet": ur[5]} for ur in urows]
+
+    cursor.execute("SELECT total_fees_collected, escrow_volume_protected FROM platform_treasury LIMIT 1")
+    treasury = cursor.fetchone()
+    treasury_data = {"fees_collected": treasury[0] if treasury else 0.0, "volume_protected": treasury[1] if treasury else 0.0}
 
     conn.close()
     return {
@@ -441,7 +453,8 @@ def get_dashboard_data(user_id: str = "ayyappan"):
         "telemetry": telemetry,
         "channels": channels,
         "audit_logs": audit_logs,
-        "all_users": all_users
+        "all_users": all_users,
+        "treasury": treasury_data
     }
 
 class ListingCreate(BaseModel):
@@ -508,20 +521,25 @@ async def buy_listing(listing_id: int, req: BuyRequest):
         conn.close()
         raise HTTPException(status_code=400, detail="Insufficient wallet balance in biometric escrow account.")
         
+    # Calculate 2% platform fee
+    fee = round(price * 0.02, 2)
+    seller_payout = price - fee
+
     cursor.execute("UPDATE profiles SET wallet_balance = wallet_balance - ? WHERE user_id = ?", (price, buyer_id))
-    cursor.execute("UPDATE profiles SET wallet_balance = wallet_balance + ? WHERE user_id = ?", (price, seller_id))
+    cursor.execute("UPDATE profiles SET wallet_balance = wallet_balance + ? WHERE user_id = ?", (seller_payout, seller_id))
     cursor.execute("UPDATE listings SET status = 'SOLD' WHERE id = ?", (listing_id,))
     
     cursor.execute("""
-        INSERT INTO transactions (listing_id, buyer_id, seller_id, amount, timestamp)
-        VALUES (?, ?, ?, ?, ?)
-    """, (listing_id, buyer_id, seller_id, price, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        INSERT INTO transactions (listing_id, buyer_id, seller_id, amount, platform_fee, status)
+        VALUES (?, ?, ?, ?, ?, 'ESCROW_COMPLETED')
+    """, (listing_id, buyer_id, seller_id, price, fee))
     
-    # Proactive Escrow Handover Reminder via Chat
+    cursor.execute("UPDATE platform_treasury SET total_fees_collected = total_fees_collected + ?, escrow_volume_protected = escrow_volume_protected + ?", (fee, price))
+
     cursor.execute("""
         INSERT INTO chat_messages (listing_id, sender_id, message, timestamp)
         VALUES (?, 'ESCROW_BOT', ?, ?)
-    """, (listing_id, f"Escrow locked for ₹{price}. Recommended safe meetup location: Central Library Lobby or CSE Block Atrium.", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    """, (listing_id, f"Escrow settled for ₹{price} (Platform fee: ₹{fee}). Handover verified near campus hub.", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
     conn.commit()
     conn.close()
@@ -539,20 +557,19 @@ async def caspian_ai_agent(req: AIChatRequest):
     cursor = conn.cursor()
     
     response_text = ""
-    # LLM / FTS5 Enhanced Intent Parsing Simulation
-    if "cheap" in prompt_lower or "under" in prompt_lower or "price" in prompt_lower:
+    if "cheap" in prompt_lower or "budget" in prompt_lower or "under" in prompt_lower:
         cursor.execute("SELECT item_name, price, condition FROM listings WHERE status='ACTIVE' ORDER BY price ASC LIMIT 2")
         items = cursor.fetchall()
-        response_text = f"Nexus AI Semantic Engine: Best budget items found -> {items[0][0]} (₹{items[0][1]}) and {items[1][0]} (₹{items[1][1]}). Safe handover near campus center."
+        response_text = f"Nexus AI Semantic Search: Top budget options -> {items[0][0]} (₹{items[0][1]}) and {items[1][0]} (₹{items[1][1]})."
     elif "calculator" in prompt_lower or "math" in prompt_lower:
         cursor.execute("SELECT item_name, price, condition FROM listings WHERE category='Assets' AND status='ACTIVE'")
         items = cursor.fetchall()
-        response_text = f"Nexus AI Intelligence: Found {len(items)} academic asset(s). Recommended: {items[0][0]} at ₹{items[0][1]} ({items[0][2]})."
-    elif "arduino" in prompt_lower or "esp32" in prompt_lower or "hardware" in prompt_lower or "kit" in prompt_lower:
+        response_text = f"Nexus AI Intelligence: Found {len(items)} academic asset(s). Recommended: {items[0][0]} at ₹{items[0][1]}."
+    elif "arduino" in prompt_lower or "esp32" in prompt_lower or "stm32" in prompt_lower or "hardware" in prompt_lower:
         cursor.execute("SELECT item_name, price, description FROM listings WHERE category='Hardware' AND status='ACTIVE'")
         items = cursor.fetchall()
         if items:
-            response_text = f"Nexus Hardware Swarm: Active lab kit -> {items[0][0]} for ₹{items[0][1]}. {items[0][2]}"
+            response_text = f"Nexus Hardware Swarm: Active kit available -> {items[0][0]} for ₹{items[0][1]}. {items[0][2]}"
         else:
             response_text = "Nexus AI: No hardware kits currently listed."
     elif "wallet" in prompt_lower or "balance" in prompt_lower:
@@ -560,10 +577,10 @@ async def caspian_ai_agent(req: AIChatRequest):
         p = cursor.fetchone()
         response_text = f"Biometric Wallet Security: Balance is ₹{p[0]:.2f} with Trust Rating {p[1]}%."
     else:
-        cursor.execute("SELECT item_name, price FROM listings WHERE status='ACTIVE' LIMIT 3")
+        cursor.execute("SELECT item_name, price FROM listings WHERE status='ACTIVE' LIMIT 4")
         items = cursor.fetchall()
         item_list = ", ".join([f"{i[0]} (₹{i[1]})" for i in items])
-        response_text = f"Nexus  AI Assistant: Active marketplace items: {item_list}. How can I negotiate or assist today?"
+        response_text = f"Nexus OS AI Assistant: Active marketplace inventory includes: {item_list}. How can I assist your exchange today?"
 
     cursor.execute("""
         INSERT INTO ai_chat_logs (user_id, prompt, response, timestamp)
@@ -632,7 +649,6 @@ async def admin_audit_action(req: AdminActionRequest):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    # Verify Admin/Moderator privilege
     cursor.execute("SELECT role FROM profiles WHERE user_id = ?", (req.admin_id,))
     adm = cursor.fetchone()
     if not adm or adm[0] not in ["ADMIN", "MODERATOR"]:
@@ -670,7 +686,7 @@ def serve_enterprise_spa():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nexus  — Enterprise Campus Exchange & AI Agent Swarm</title>
+    <title>Nexus OS — Enterprise Campus Exchange & AI Agent Swarm</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
@@ -693,7 +709,7 @@ def serve_enterprise_spa():
         <div class="bg-white border border-slate-200 w-full max-w-md rounded-3xl p-8 shadow-2xl text-center relative overflow-hidden">
             <div class="absolute inset-x-0 top-0 h-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-teal-500"></div>
             <div class="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-2xl mx-auto mb-4 shadow-inner">⚡</div>
-            <h2 class="text-xl font-extrabold text-slate-900 mb-1">Nexus  Biometric Portal</h2>
+            <h2 class="text-xl font-extrabold text-slate-900 mb-1">Nexus OS Biometric Portal</h2>
             <p class="text-xs text-slate-500 mb-6">Passwordless enterprise authentication secured by Caspian Passkeys.</p>
             
             <form onsubmit="handleBiometricLogin(event)" class="space-y-4 text-left">
@@ -720,8 +736,8 @@ def serve_enterprise_spa():
             <div class="flex items-center gap-3">
                 <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 flex items-center justify-center font-black text-white shadow-lg shadow-blue-500/25 text-lg">NX</div>
                 <div>
-                    <h1 class="font-extrabold text-base text-slate-900 tracking-tight leading-none">Nexus  Enterprise</h1>
-                    <span class="text-[10px] text-blue-600 font-mono tracking-wider font-bold"></span>
+                    <h1 class="font-extrabold text-base text-slate-900 tracking-tight leading-none">Nexus OS Enterprise</h1>
+                    <span class="text-[10px] text-blue-600 font-mono tracking-wider font-bold">Caspian AI Swarm • Biometric Escrow • Protocol v11.0</span>
                 </div>
             </div>
 
@@ -785,6 +801,7 @@ def serve_enterprise_spa():
                 <button onclick="switchTab('ai_agent')" id="tab_ai_agent" class="w-full text-left px-4 py-3 rounded-2xl font-bold text-xs transition flex items-center gap-3 text-slate-600 hover:bg-slate-100/80">🤖 Caspian AI Assistant</button>
                 <button onclick="switchTab('telemetry')" id="tab_telemetry" class="w-full text-left px-4 py-3 rounded-2xl font-bold text-xs transition flex items-center gap-3 text-slate-600 hover:bg-slate-100/80">📊 Swarm Telemetry (40% Score)</button>
                 <button onclick="switchTab('diagnostics')" id="tab_diagnostics" class="w-full text-left px-4 py-3 rounded-2xl font-bold text-xs transition flex items-center gap-3 text-slate-600 hover:bg-slate-100/80">🔌 Channel Diagnostics</button>
+                <button onclick="switchTab('treasury')" id="tab_treasury" class="w-full text-left px-4 py-3 rounded-2xl font-bold text-xs transition flex items-center gap-3 text-slate-600 hover:bg-slate-100/80">💰 Platform Treasury</button>
                 <button onclick="switchTab('admin')" id="tab_admin" class="w-full text-left px-4 py-3 rounded-2xl font-bold text-xs transition flex items-center gap-3 text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 hidden">🛡️ Admin RBAC Audit</button>
             </nav>
         </aside>
@@ -963,7 +980,7 @@ def serve_enterprise_spa():
                 </form>
             </section>
 
-            <!-- SECTION: SWARM TELEMETRY (40% CHALLENGE SCORE PANEL) -->
+            <!-- SECTION: SWARM TELEMETRY -->
             <section id="section_telemetry" class="hidden bg-white/90 backdrop-blur-md border border-slate-200/80 rounded-3xl p-7 shadow-sm space-y-4">
                 <div class="border-b border-slate-100 pb-3">
                     <h3 class="text-base font-extrabold text-slate-900">📊 Caspian Agent Telemetry & Scoreboard (40% Metric)</h3>
@@ -974,7 +991,7 @@ def serve_enterprise_spa():
                 </div>
             </section>
 
-            <!-- SECTION: CHANNEL DIAGNOSTICS (WEBHOOK CONFIGURATION) -->
+            <!-- SECTION: CHANNEL DIAGNOSTICS -->
             <section id="section_diagnostics" class="hidden bg-white/90 backdrop-blur-md border border-slate-200/80 rounded-3xl p-7 shadow-sm space-y-4">
                 <div class="border-b border-slate-100 pb-3">
                     <h3 class="text-base font-extrabold text-slate-900">🔌 Channel Diagnostics & Webhook Tunnels</h3>
@@ -985,7 +1002,25 @@ def serve_enterprise_spa():
                 </div>
             </section>
 
-            <!-- SECTION: ADMIN RBAC AUDIT DASHBOARD -->
+            <!-- SECTION: PLATFORM TREASURY -->
+            <section id="section_treasury" class="hidden bg-white/90 backdrop-blur-md border border-slate-200/80 rounded-3xl p-7 shadow-sm space-y-4">
+                <div class="border-b border-slate-100 pb-3">
+                    <h3 class="text-base font-extrabold text-slate-900">💰 Platform Treasury & Fee Revenue</h3>
+                    <p class="text-xs text-slate-500">Automated 2% gas fee collection from settled P2P escrow transactions.</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-5">
+                        <span class="text-[11px] font-mono text-slate-400 uppercase font-bold">Total Fees Collected</span>
+                        <h3 id="treasuryFees" class="text-2xl font-black text-emerald-600 font-mono mt-1">₹0.00</h3>
+                    </div>
+                    <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-5">
+                        <span class="text-[11px] font-mono text-slate-400 uppercase font-bold">Protected Escrow Volume</span>
+                        <h3 id="treasuryVolume" class="text-2xl font-black text-blue-600 font-mono mt-1">₹0.00</h3>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION: ADMIN RBAC AUDIT -->
             <section id="section_admin" class="hidden bg-white/90 backdrop-blur-md border border-slate-200/80 rounded-3xl p-7 shadow-sm space-y-6">
                 <div class="border-b border-slate-100 pb-3 flex justify-between items-center">
                     <div>
@@ -1014,10 +1049,9 @@ def serve_enterprise_spa():
 
     <script>
         let currentUserId = 'ayyappan';
-        let appState = { listings: [], profile: {}, announcements: [], transactions: [], chats: [], ai_logs: [], telemetry: [], channels: [], audit_logs: [], all_users: [] };
+        let appState = { listings: [], profile: {}, announcements: [], transactions: [], chats: [], ai_logs: [], telemetry: [], channels: [], audit_logs: [], all_users: [], treasury: {} };
         let activeCategory = 'ALL';
 
-        // Real-Time WebSocket Connection
         let ws = new WebSocket(`ws://${window.location.host}/ws/live`);
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data);
@@ -1049,7 +1083,7 @@ def serve_enterprise_spa():
                 }
             } catch (err) {
                 errDiv.innerText = "Network error connecting to biometric server.";
-                errDiv.classList.remove('hidden');
+                errDiv.classList.add('hidden');
             }
         }
 
@@ -1058,7 +1092,6 @@ def serve_enterprise_spa():
                 const res = await fetch(`/api/dashboard/${currentUserId}`);
                 appState = await res.json();
                 
-                // Profile Rendering
                 const p = appState.profile;
                 document.getElementById('sidebarAvatar').src = p.avatar_url;
                 document.getElementById('sidebarName').innerText = p.full_name;
@@ -1072,14 +1105,12 @@ def serve_enterprise_spa():
                 document.getElementById('metaYear').innerText = p.year;
                 document.getElementById('metaTrust').innerText = p.trust_score + '%';
 
-                // Show Admin tab if ADMIN or MODERATOR
                 if (p.role === 'ADMIN' || p.role === 'MODERATOR') {
                     document.getElementById('tab_admin').classList.remove('hidden');
                 } else {
                     document.getElementById('tab_admin').classList.add('hidden');
                 }
 
-                // Render Badges
                 const badgeContainer = document.getElementById('sidebarBadges');
                 badgeContainer.innerHTML = '';
                 p.badges.forEach(badge => {
@@ -1089,12 +1120,16 @@ def serve_enterprise_spa():
                     badgeContainer.appendChild(span);
                 });
 
-                // Bulletin Banner
                 if (appState.announcements.length > 0) {
                     const b = appState.announcements[0];
                     document.getElementById('bulletinTitle').innerText = b.title;
                     document.getElementById('bulletinContent').innerText = b.content;
                     document.getElementById('bulletinDate').innerText = b.created_at;
+                }
+
+                if (appState.treasury) {
+                    document.getElementById('treasuryFees').innerText = '₹' + (appState.treasury.fees_collected || 0).toFixed(2);
+                    document.getElementById('treasuryVolume').innerText = '₹' + (appState.treasury.volume_protected || 0).toFixed(2);
                 }
 
                 renderMarketplace();
@@ -1111,7 +1146,7 @@ def serve_enterprise_spa():
         }
 
         function switchTab(tabId) {
-            ['marketplace', 'post', 'bulletin', 'wallet', 'chat', 'ai_agent', 'telemetry', 'diagnostics', 'admin'].forEach(t => {
+            ['marketplace', 'post', 'bulletin', 'wallet', 'chat', 'ai_agent', 'telemetry', 'diagnostics', 'treasury', 'admin'].forEach(t => {
                 const el = document.getElementById('section_' + t);
                 if (el) el.classList.add('hidden');
                 const btn = document.getElementById('tab_' + t);
@@ -1219,7 +1254,7 @@ def serve_enterprise_spa():
                 div.innerHTML = `
                     <div>
                         <div class="text-xs font-bold text-slate-900">Tx #${t.tx_id} — ${escapeHtml(t.item_name)}</div>
-                        <div class="text-[10px] text-slate-400 font-mono mt-0.5">Buyer: ${t.buyer_id} | Seller: ${t.seller_id} | ${t.timestamp}</div>
+                        <div class="text-[10px] text-slate-400 font-mono mt-0.5">Buyer: ${t.buyer_id} | Seller: ${t.seller_id} | Fee: ₹${t.platform_fee} | ${t.timestamp}</div>
                     </div>
                     <div class="text-right">
                         <div class="text-xs font-extrabold text-emerald-600 font-mono">₹${t.amount.toFixed(2)}</div>
@@ -1258,7 +1293,7 @@ def serve_enterprise_spa():
                 <div class="flex flex-col items-start">
                     <div class="text-[9px] font-mono text-slate-400 mb-0.5">Nexus AI • Active</div>
                     <div class="bg-white border border-slate-200 text-slate-800 px-4 py-3 rounded-2xl rounded-bl-none shadow-sm">
-                        Hello! I am your Nexus  Semantic Assistant. Ask questions about campus listings or biometric security.
+                        Hello! I am your Nexus OS Semantic Assistant. Ask questions about campus listings or biometric security.
                     </div>
                 </div>
             `;
@@ -1472,4 +1507,4 @@ if __name__ == "__main__":
     client_thread = threading.Thread(target=client.listen, daemon=True)
     client_thread.start()
 
-    uvicorn.run("app:app", host="127.0.0.1", port=8009, reload=False)
+    uvicorn.run("app:app", host="127.0.0.1", port=8010, reload=False)
